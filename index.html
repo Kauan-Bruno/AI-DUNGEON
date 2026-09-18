@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full bg-slate-950 text-emerald-400 font-mono select-none">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Roguelike Crawler 2D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Fira+Code:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'VT323', 'Fira Code', monospace;
+            background-color: #030712;
+            touch-action: manipulation;
+        }
+
+        .crt-overlay {
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.25) 50%
+            ), linear-gradient(
+                90deg,
+                rgba(255, 0, 0, 0.03),
+                rgba(0, 255, 0, 0.01),
+                rgba(0, 0, 255, 0.03)
+            );
+            background-size: 100% 3px, 6px 100%;
+            pointer-events: none;
+        }
+
+        .glow-text {
+            text-shadow: 0 0 10px rgba(16, 185, 129, 0.7);
+        }
+
+        .glow-box {
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.15), inset 0 0 15px rgba(16, 185, 129, 0.05);
+        }
+
+        /* Styling individual grid cells for perfect 2D display */
+        .grid-tile {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.75rem;
+            line-height: 1;
+            user-select: none;
+            border-radius: 4px;
+            aspect-ratio: 1 / 1;
+            font-weight: bold;
+        }
+
+        .tile-player { color: #38bdf8; background-color: rgba(56, 189, 248, 0.15); text-shadow: 0 0 10px #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); }
+        .tile-wall { color: #475569; background-color: #0f172a; border: 1px solid #1e293b; }
+        .tile-floor { color: #1e293b; }
+        .tile-chest { color: #fbbf24; text-shadow: 0 0 10px #fbbf24; animation: pulse 1.2s infinite; }
+        .tile-door { color: #c084fc; text-shadow: 0 0 10px #c084fc; animation: pulse 1s infinite; }
+        
+        .tile-enemy-e { color: #f87171; background-color: rgba(248, 113, 113, 0.1); text-shadow: 0 0 8px #f87171; }
+        .tile-enemy-g { color: #fb923c; background-color: rgba(251, 146, 60, 0.1); text-shadow: 0 0 8px #fb923c; }
+        .tile-enemy-o { color: #a855f7; background-color: rgba(168, 85, 247, 0.1); text-shadow: 0 0 8px #a855f7; }
+        .tile-enemy-d { color: #f43f5e; background-color: rgba(244, 63, 94, 0.15); text-shadow: 0 0 10px #f43f5e; }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(0.92); opacity: 0.6; }
+        }
+
+        .btn-retro {
+            background-color: #0f172a;
+            border: 1px solid #10b981;
+            color: #34d399;
+            transition: all 0.1s ease-in-out;
+            box-shadow: 0 0 6px rgba(16, 185, 129, 0.2);
+        }
+        .btn-retro:hover {
+            background-color: #065f46;
+            color: #ffffff;
+            box-shadow: 0 0 14px rgba(16, 185, 129, 0.6);
+        }
+        .btn-retro:active {
+            transform: scale(0.94);
+            background-color: #047857;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col justify-between p-2 md:p-4 text-xl leading-snug">
+
+    <!-- Header Section -->
+    <header class="flex justify-between items-center border-b border-emerald-800/80 pb-2 mb-2 max-w-4xl mx-auto w-full">
+        <div class="flex items-center gap-2">
+            <span class="inline-block w-3 h-3 bg-emerald-500 rounded-full animate-ping"></span>
+            <h1 class="text-2xl md:text-3xl font-bold tracking-wider text-emerald-400 glow-text">
+                AI ROGUELIKE 2D
+            </h1>
+        </div>
+        <button id="audio-toggle" class="btn-retro px-3 py-1 rounded text-xs md:text-sm flex items-center gap-1">
+            🔊 <span id="audio-status">SOM: ON</span>
+        </button>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col md:flex-row gap-4 max-w-4xl mx-auto w-full overflow-hidden items-center md:items-stretch">
+        
+        <!-- Left Column: CRT Map Display -->
+        <section class="w-full md:w-3/5 bg-slate-900 border-2 border-emerald-600/80 rounded-xl p-3 flex flex-col justify-between relative overflow-hidden glow-box">
+            <div class="crt-overlay absolute inset-0 z-10"></div>
+            
+            <!-- Terminal Header / Title -->
+            <div id="screen-header" class="text-xs text-emerald-500 font-bold uppercase tracking-widest mb-2 flex justify-between">
+                <span>> SISTEMA DE NAVEGAÇÃO CRAWLER</span>
+                <span id="coord-display">POS: [X:1, Y:1]</span>
+            </div>
+
+            <!-- Main 2D Grid Canvas (10 Columns x 8 Rows) -->
+            <div class="flex-1 flex items-center justify-center p-1">
+                <div id="grid-container" class="grid grid-cols-10 gap-1 w-full max-w-[420px]">
+                    <!-- Dynamically populated 80 cells -->
+                </div>
+            </div>
+
+            <!-- Stats Bar -->
+            <div id="status-bar" class="z-0 border-t border-emerald-800/80 pt-2 mt-2 text-sm md:text-base grid grid-cols-3 gap-1 text-emerald-300 font-bold">
+                <!-- Dynamically populated -->
+            </div>
+        </section>
+
+        <!-- Right Column: Combat Log & Touch Pad -->
+        <aside class="w-full md:w-2/5 flex flex-col gap-3">
+            
+            <!-- Combat Log Box -->
+            <div class="bg-slate-900 border border-emerald-700/70 rounded-xl p-3 flex flex-col flex-1 min-h-[140px] glow-box">
+                <h2 class="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-1 border-b border-emerald-800/80 pb-1">
+                    > Registro de Eventos
+                </h2>
+                <div id="log-box" class="flex-1 flex flex-col justify-end text-sm space-y-1 text-emerald-300 overflow-y-auto max-h-[150px]">
+                    <!-- Injected dynamically -->
+                </div>
+            </div>
+
+            <!-- Touch Controls & D-Pad Panel -->
+            <div class="bg-slate-900 border border-emerald-800 rounded-xl p-3 glow-box flex flex-col items-center">
+                <h2 class="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-2 border-b border-emerald-800/80 w-full text-center pb-1">
+                    > D-Pad de Movimentação 2D
+                </h2>
+                
+                <!-- 3x3 D-Pad Matrix -->
+                <div class="grid grid-cols-3 gap-2 w-48 mb-3">
+                    <div></div>
+                    <button onclick="game.handleInput('w')" class="btn-retro py-2 rounded-lg font-bold text-lg" title="Mover para CIMA (Y - 1)">▲ W</button>
+                    <div></div>
+                    <button onclick="game.handleInput('a')" class="btn-retro py-2 rounded-lg font-bold text-lg" title="Mover para ESQUERDA (X - 1)">◄ A</button>
+                    <button onclick="game.handleInput('s')" class="btn-retro py-2 rounded-lg font-bold text-lg" title="Mover para BAIXO (Y + 1)">▼ S</button>
+                    <button onclick="game.handleInput('d')" class="btn-retro py-2 rounded-lg font-bold text-lg" title="Mover para DIREITA (X + 1)">► D</button>
+                </div>
+
+                <!-- Action Bar -->
+                <div class="grid grid-cols-4 gap-1.5 w-full text-xs font-bold">
+                    <button onclick="game.handleInput('f')" class="btn-retro py-2 rounded-md" title="Ataque à Distância">F (Arco)</button>
+                    <button onclick="game.handleInput('q')" class="btn-retro py-2 rounded-md" title="Defesa">Q (Def)</button>
+                    <button onclick="game.handleInput('e')" class="btn-retro py-2 rounded-md" title="Interagir">E (Usar)</button>
+                    <button onclick="game.handleInput('g')" class="btn-retro py-2 rounded-md" title="Abrir Gacha">G (Gacha)</button>
+                </div>
+
+                <!-- Menu / Gacha Select Shortcuts -->
+                <div id="menu-shortcuts" class="grid grid-cols-3 gap-1.5 w-full mt-2 text-xs">
+                    <button onclick="game.handleInput('1')" class="btn-retro py-1.5 rounded-md font-bold">Opção 1</button>
+                    <button onclick="game.handleInput('2')" class="btn-retro py-1.5 rounded-md font-bold">Opção 2</button>
+                    <button onclick="game.handleInput('3')" class="btn-retro py-1.5 rounded-md font-bold">Opção 3</button>
+                </div>
+            </div>
+
+        </aside>
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center text-xs text-emerald-700 py-1 max-w-4xl mx-auto w-full">
+        Movimentação 2D: <span class="text-emerald-500">W (Cima) / S (Baixo) / A (Esquerda) / D (Direita)</span>
+    </footer>
+
+    <script>
+        /* Web Audio API Sound Effects Synthesizer */
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                }
+            }
+
+            playTone(freq, type, duration, gainVal = 0.1) {
+                if (!this.enabled) return;
+                this.init();
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch (e) {}
+            }
+
+            step() { this.playTone(120, 'triangle', 0.05, 0.05); }
+            melee() { this.playTone(180, 'square', 0.1, 0.15); }
+            ranged() {
+                if (!this.enabled) return;
+                this.init();
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(500, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.12);
+                    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.12);
+                } catch(e){}
+            }
+            defend() { this.playTone(300, 'sine', 0.18, 0.15); }
+            chest() {
+                [350, 480, 600, 800].forEach((freq, i) => {
+                    setTimeout(() => this.playTone(freq, 'sine', 0.12, 0.08), i * 50);
+                });
+            }
+            gacha() {
+                [250, 400, 550, 700, 850].forEach((freq, i) => {
+                    setTimeout(() => this.playTone(freq, 'square', 0.08, 0.06), i * 45);
+                });
+            }
+            hit() { this.playTone(80, 'sawtooth', 0.2, 0.2); }
+            gameOver() {
+                [280, 220, 170, 110].forEach((freq, i) => {
+                    setTimeout(() => this.playTone(freq, 'sawtooth', 0.25, 0.18), i * 150);
+                });
+            }
+        }
+
+        const sfx = new SoundFX();
+        document.getElementById('audio-toggle').addEventListener('click', () => {
+            sfx.enabled = !sfx.enabled;
+            document.getElementById('audio-status').innerText = sfx.enabled ? "SOM: ON" : "SOM: OFF";
+            if (sfx.enabled) sfx.init();
+        });
+
+        // ==========================================
+        // CONFIGURAÇÕES E CONSTANTES (1:1 Python)
+        // Matriz de cada template: 8 linhas (Y = 0 a 7), 10 colunas (X = 0 a 9)
+        // ==========================================
+        const ROOM_TEMPLATES = [
+            [
+                "##########",
+                "#........#",
+                "#........#",
+                "#........#",
+                "#........#",
+                "#........#",
+                "#........#",
+                "##########"
+            ],
+            [
+                "##########",
+                "#..####..#",
+                "#........#",
+                "##......##",
+                "##......##",
+                "#........#",
+                "#..####..#",
+                "##########"
+            ],
+            [
+                "##########",
+                "#........#",
+                "#.##..##.#",
+                "#........#",
+                "#........#",
+                "#.##..##.#",
+                "#........#",
+                "##########"
+            ]
+        ];
+
+        // Random helpers matching Python logic
+        function randomUniform(min, max) { return Math.random() * (max - min) + min; }
+        function randomChoice(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+        function randomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+        // ==========================================
+        // CLASSES DE ENTIDADES (1:1 Python)
+        // ==========================================
+        class Entity {
+            constructor(x, y, hp, melee, ranged, defense, char) {
+                this.x = x;
+                this.y = y;
+                this.max_hp = hp;
+                this.hp = hp;
+                this.melee = melee;
+                this.ranged = ranged;
+                this.defense = defense;
+                this.char = char;
+                this.is_defending = false;
+            }
+
+            distance_to(other) {
+                return Math.abs(this.x - other.x) + Math.abs(this.y - other.y);
+            }
+
+            take_damage(amount) {
+                const actual_def = this.is_defending ? this.defense * 2 : this.defense;
+                const damage = Math.max(1, Math.floor(amount - actual_def));
+                this.hp -= damage;
+                return damage;
+            }
+        }
+
+        class Player extends Entity {
+            constructor(x, y) {
+                super(x, y, 50, 10, 8, 3, '@');
+                this.money = 0;
+                this.level = 1;
+            }
+
+            heal(amount) {
+                this.hp = Math.min(this.max_hp, this.hp + amount);
+            }
+        }
+
+        class Enemy extends Entity {
+            constructor(x, y, difficulty_level) {
+                const hp = Math.floor(randomUniform(15, 25) + (difficulty_level * randomUniform(2, 5)));
+                const melee = Math.floor(randomUniform(3, 6) + (difficulty_level * randomUniform(1, 2.5)));
+                const ranged = Math.floor(randomUniform(2, 5) + (difficulty_level * randomUniform(0.5, 2)));
+                const defense = Math.floor(randomUniform(1, 3) + (difficulty_level * randomUniform(0.5, 1.5)));
+
+                const chars = ['E', 'G', 'O', 'D'];
+                const char = chars[Math.min(chars.length - 1, Math.floor(difficulty_level / 3))];
+
+                super(x, y, hp, melee, ranged, defense, char);
+
+                this.unpredictability = Math.min(0.6, difficulty_level * 0.05);
+                this.value = Math.floor(randomUniform(5, 15) * (1 + difficulty_level * 0.2));
+            }
+        }
+
+        // ==========================================
+        // MOTOR DO JOGO (1:1 Python com tratamento de matriz 2D corrigido)
+        // ==========================================
+        class Game {
+            constructor() {
+                this.player = new Player(1, 1);
+                this.difficulty_level = 1;
+                this.enemies = [];
+                this.map_grid = []; // Guardará matriz 2D: map_grid[y][x]
+                this.chest_pos = null;
+                this.door_pos = null;
+                this.logs = ["Bem-vindo a Dungeon! Sobreviva o maximo que puder."];
+                this.state = "MENU";
+            }
+
+            log(message) {
+                this.logs.push(message);
+                if (this.logs.length > 5) {
+                    this.logs.shift();
+                }
+            }
+
+            generate_room() {
+                const template = randomChoice(ROOM_TEMPLATES);
+                // Converte strings em matrizes de caracteres acessíveis por [y][x]
+                this.map_grid = template.map(row => row.split(''));
+
+                this.player.x = 1;
+                this.player.y = 1;
+                this.enemies = [];
+                this.chest_pos = null;
+                this.door_pos = null;
+
+                const num_enemies = Math.min(10, randomInt(1, 2) + Math.floor(this.difficulty_level / 2));
+
+                // Altura (linhas) = map_grid.length = 8
+                // Largura (colunas) = map_grid[0].length = 10
+                for (let i = 0; i < num_enemies; i++) {
+                    while (true) {
+                        const ex = randomInt(1, this.map_grid[0].length - 2); // X de 1 a 8
+                        const ey = randomInt(1, this.map_grid.length - 2);    // Y de 1 a 6
+                        if (this.map_grid[ey][ex] === '.' && !(ex === 1 && ey === 1)) {
+                            this.enemies.push(new Enemy(ex, ey, this.difficulty_level));
+                            break;
+                        }
+                    }
+                }
+
+                this.log(`--- SALA ${this.difficulty_level} ---`);
+            }
+
+            spawn_loot_and_exit() {
+                const empty_spaces = [];
+                for (let y = 0; y < this.map_grid.length; y++) {
+                    for (let x = 0; x < this.map_grid[y].length; x++) {
+                        if (this.map_grid[y][x] === '.') {
+                            empty_spaces.push([x, y]);
+                        }
+                    }
+                }
+
+                // Embaralha posições vazias
+                for (let i = empty_spaces.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [empty_spaces[i], empty_spaces[j]] = [empty_spaces[j], empty_spaces[i]];
+                }
+
+                if (empty_spaces.length >= 2) {
+                    this.chest_pos = empty_spaces[0];
+                    this.door_pos = empty_spaces[1];
+                    this.map_grid[this.chest_pos[1]][this.chest_pos[0]] = 'C';
+                    this.map_grid[this.door_pos[1]][this.door_pos[0]] = '>';
+                    this.log("A sala foi limpa! Um bau (C) e a saida (>) surgiram.");
+                    this.player.money += 20 + (this.difficulty_level * 5);
+                    sfx.chest();
+                }
+            }
+
+            open_chest() {
+                const item_types = ['Melee', 'Ranged', 'Defense', 'HP'];
+                const drop = randomChoice(item_types);
+                const power = Math.floor(randomUniform(2, 5) + (this.difficulty_level * randomUniform(1.0, 2.0)));
+
+                if (drop === 'Melee') {
+                    this.player.melee += power;
+                    this.log(`Bau: Nova Arma! Melee +${power}`);
+                } else if (drop === 'Ranged') {
+                    this.player.ranged += power;
+                    this.log(`Bau: Novo Arco! Ranged +${power}`);
+                } else if (drop === 'Defense') {
+                    this.player.defense += power;
+                    this.log(`Bau: Nova Armadura! Defesa +${power}`);
+                } else if (drop === 'HP') {
+                    this.player.max_hp += power * 2;
+                    this.player.heal(power * 5);
+                    this.log(`Bau: Pocao Vital! Max HP +${power * 2} e Cura`);
+                }
+
+                this.map_grid[this.chest_pos[1]][this.chest_pos[0]] = '.';
+                this.chest_pos = null;
+                sfx.chest();
+            }
+
+            roll_gacha(gacha_type, cost) {
+                if (this.player.money < cost) {
+                    this.log(`Gacha: Fundos insuficientes! Voce precisa de ${cost} $$$.`);
+                    return;
+                }
+
+                this.player.money -= cost;
+                const power = Math.floor(randomUniform(3, 7) + (this.difficulty_level * randomUniform(1.5, 2.5)));
+
+                if (gacha_type === 'HP') {
+                    this.player.max_hp += power * 2;
+                    this.player.heal(power * 5);
+                    this.log(`Gacha (Vitalidade): Sucesso! Max HP +${power * 2} e Cura`);
+                } else if (gacha_type === 'Weapon') {
+                    if (Math.random() > 0.5) {
+                        this.player.melee += power;
+                        this.log(`Gacha (Armamento): Sucesso! Melee +${power}`);
+                    } else {
+                        this.player.ranged += power;
+                        this.log(`Gacha (Armamento): Sucesso! Ranged +${power}`);
+                    }
+                } else if (gacha_type === 'Armor') {
+                    this.player.defense += power;
+                    this.log(`Gacha (Protecao): Sucesso! Defesa +${power}`);
+                }
+                sfx.gacha();
+            }
+
+            get_enemy_at(x, y) {
+                for (let e of this.enemies) {
+                    if (e.x === x && e.y === y) return e;
+                }
+                return null;
+            }
+
+            enemy_turn() {
+                for (let e of this.enemies) {
+                    e.is_defending = false;
+                    const dist = e.distance_to(this.player);
+
+                    let action;
+                    if (Math.random() < e.unpredictability) {
+                        action = randomChoice(["move", "ranged", "defend"]);
+                    } else {
+                        if (dist === 1) action = "melee";
+                        else if (dist <= 4) action = randomChoice(["move", "ranged"]);
+                        else action = "move";
+                    }
+
+                    if (action === "defend") {
+                        e.is_defending = true;
+                        this.log(`${e.char} assume postura defensiva.`);
+                    } else if (action === "ranged") {
+                        const dmg = this.player.take_damage(e.ranged);
+                        this.log(`${e.char} atirou em voce causando ${dmg} dano!`);
+                        sfx.hit();
+                    } else {
+                        if (dist === 1) {
+                            const dmg = this.player.take_damage(e.melee);
+                            this.log(`${e.char} atacou voce causando ${dmg} dano!`);
+                            sfx.hit();
+                        } else {
+                            const dx = this.player.x > e.x ? 1 : this.player.x < e.x ? -1 : 0;
+                            const dy = this.player.y > e.y ? 1 : this.player.y < e.y ? -1 : 0;
+
+                            // Verificação rigorosa de limites na matriz 2D
+                            if (dx !== 0 && 
+                                (e.x + dx) >= 0 && (e.x + dx) < this.map_grid[0].length &&
+                                this.map_grid[e.y][e.x + dx] === '.' && 
+                                !this.get_enemy_at(e.x + dx, e.y)) {
+                                e.x += dx;
+                            } else if (dy !== 0 && 
+                                (e.y + dy) >= 0 && (e.y + dy) < this.map_grid.length &&
+                                this.map_grid[e.y + dy][e.x] === '.' && 
+                                !this.get_enemy_at(e.x, e.y + dy)) {
+                                e.y += dy;
+                            }
+                        }
+                    }
+                }
+            }
+
+            process_input(action) {
+                this.player.is_defending = false;
+                let dx = 0, dy = 0;
+
+                if (action === 'w') dy = -1;      // CIMA: reduz linha Y
+                else if (action === 's') dy = 1;  // BAIXO: aumenta linha Y
+                else if (action === 'a') dx = -1; // ESQUERDA: reduz coluna X
+                else if (action === 'd') dx = 1;  // DIREITA: aumenta coluna X
+                else if (action === 'g') {
+                    this.state = "GACHA";
+                    this.draw();
+                    return;
+                }
+                else if (action === 'q') {
+                    this.player.is_defending = true;
+                    this.log("Voce se defende! Defesa dobrada este turno.");
+                    sfx.defend();
+                }
+                else if (action === 'f') {
+                    if (this.enemies.length > 0) {
+                        let target = this.enemies[0];
+                        let minDist = target.distance_to(this.player);
+                        for (let e of this.enemies) {
+                            const d = e.distance_to(this.player);
+                            if (d < minDist) {
+                                minDist = d;
+                                target = e;
+                            }
+                        }
+                        const dmg = target.take_damage(this.player.ranged);
+                        this.log(`Voce atirou no ${target.char} causando ${dmg} de dano!`);
+                        sfx.ranged();
+
+                        if (target.hp <= 0) {
+                            this.log(`${target.char} morreu! +${target.value} $$$`);
+                            this.player.money += target.value;
+                            this.enemies = this.enemies.filter(e => e !== target);
+                        }
+                    } else {
+                        this.log("Nenhum alvo visivel.");
+                    }
+                }
+                else if (action === 'e') {
+                    if (this.chest_pos && this.player.x === this.chest_pos[0] && this.player.y === this.chest_pos[1]) {
+                        this.open_chest();
+                    } else if (this.door_pos && this.player.x === this.door_pos[0] && this.player.y === this.door_pos[1]) {
+                        this.difficulty_level += 1;
+                        this.generate_room();
+                        this.draw();
+                        return;
+                    } else {
+                        this.log("Nada para interagir aqui.");
+                        this.draw();
+                        return;
+                    }
+                } else {
+                    return;
+                }
+
+                // Tentar movimentação 2D com checagem rigorosa de limites
+                if (dx !== 0 || dy !== 0) {
+                    const nx = this.player.x + dx;
+                    const ny = this.player.y + dy;
+
+                    // 1. Checa se as coordenadas resultantes estão dentro dos limites do mapa 10x8
+                    if (ny >= 0 && ny < this.map_grid.length && nx >= 0 && nx < this.map_grid[0].length) {
+                        const target = this.get_enemy_at(nx, ny);
+
+                        if (target) {
+                            // Atacar inimigo
+                            const dmg = target.take_damage(this.player.melee);
+                            this.log(`Voce atacou ${target.char} causando ${dmg} dano!`);
+                            sfx.melee();
+
+                            if (target.hp <= 0) {
+                                this.log(`${target.char} morreu! +${target.value} $$$`);
+                                this.player.money += target.value;
+                                this.enemies = this.enemies.filter(e => e !== target);
+                            }
+                        } else if (['.', 'C', '>'].includes(this.map_grid[ny][nx])) {
+                            // Mover jogador com sucesso
+                            this.player.x = nx;
+                            this.player.y = ny;
+                            sfx.step();
+                        }
+                    }
+                }
+
+                // Limpeza e turno dos inimigos
+                if (this.enemies.length === 0 && !this.chest_pos && !this.door_pos) {
+                    this.spawn_loot_and_exit();
+                }
+
+                if (this.enemies.length > 0) {
+                    this.enemy_turn();
+                }
+
+                if (this.player.hp <= 0) {
+                    this.state = "GAMEOVER";
+                    sfx.gameOver();
+                }
+
+                this.draw();
+            }
+
+            draw() {
+                const gridContainer = document.getElementById('grid-container');
+                const statusBar = document.getElementById('status-bar');
+                const logBox = document.getElementById('log-box');
+                const coordDisplay = document.getElementById('coord-display');
+
+                coordDisplay.innerText = `POS: [X:${this.player.x}, Y:${this.player.y}]`;
+
+                if (this.state === "MENU") {
+                    gridContainer.className = "col-span-10 text-center text-emerald-400 py-6 font-bold";
+                    gridContainer.innerHTML = `
+                        <div class="space-y-3">
+                            <div class="text-2xl text-yellow-400">=== MENU PRINCIPAL ===</div>
+                            <p>Pressione [1] ou clique abaixo para iniciar a jornada na Dungeon!</p>
+                            <div class="flex justify-center gap-4 pt-2">
+                                <button onclick="game.handleInput('1')" class="btn-retro px-6 py-2 rounded-lg text-lg">1. Iniciar Jogo</button>
+                            </div>
+                        </div>
+                    `;
+                    statusBar.innerHTML = `<div class="col-span-3 text-center">Aguardando início...</div>`;
+                    this.renderLogs(logBox);
+                    return;
+                }
+
+                if (this.state === "GACHA") {
+                    gridContainer.className = "col-span-10 text-left text-yellow-300 py-2";
+                    gridContainer.innerHTML = `
+                        <div class="bg-slate-950/90 p-4 rounded-lg border border-yellow-500/50 space-y-2">
+                            <div class="text-xl text-yellow-400 font-bold border-b border-yellow-500/40 pb-1">GACHA RNG (Saldo: ${this.player.money} $$$)</div>
+                            <div class="text-sm">1. Vitalidade ($50) -> +Max HP e Cura</div>
+                            <div class="text-sm">2. Armamento ($75) -> +Melee / +Ranged</div>
+                            <div class="text-sm">3. Proteção  ($60) -> +Armadura</div>
+                            <div class="text-xs text-emerald-400 pt-2">[Pressione 1, 2 ou 3 para comprar / Qualquer outra tecla para sair]</div>
+                        </div>
+                    `;
+                    statusBar.innerHTML = `<div class="col-span-3 text-center text-yellow-400">SISTEMA GACHA ATIVO</div>`;
+                    this.renderLogs(logBox);
+                    return;
+                }
+
+                if (this.state === "GAMEOVER") {
+                    gridContainer.className = "col-span-10 text-center text-red-500 py-6 font-bold animate-pulse";
+                    gridContainer.innerHTML = `
+                        <div class="space-y-2">
+                            <div class="text-3xl">VOCÊ MORREU!</div>
+                            <p class="text-emerald-400 text-sm">Salas Limpas: ${this.difficulty_level - 1} | $$$: ${this.player.money}</p>
+                            <button onclick="game.handleInput('1')" class="btn-retro px-6 py-2 rounded-lg text-white mt-3">Reiniciar Jogo</button>
+                        </div>
+                    `;
+                    statusBar.innerHTML = `<div class="col-span-3 text-center text-red-400">FIM DE JOGO</div>`;
+                    this.renderLogs(logBox);
+                    return;
+                }
+
+                // Renderiza o mapa 2D perfeitamente alinhado em células 10x8
+                gridContainer.className = "grid grid-cols-10 gap-1 w-full max-w-[420px]";
+                
+                // Clona matriz original de caracteres
+                const render_grid = this.map_grid.map(row => [...row]);
+
+                // Insere Inimigos na matriz temporária de renderização
+                for (let e of this.enemies) {
+                    render_grid[e.y][e.x] = e.char;
+                }
+
+                // Insere Jogador na matriz temporária de renderização
+                render_grid[this.player.y][this.player.x] = this.player.char;
+
+                let cellsHtml = "";
+                // Iteração linha por linha (Y), célula por célula (X)
+                for (let y = 0; y < render_grid.length; y++) {
+                    for (let x = 0; x < render_grid[y].length; x++) {
+                        const char = render_grid[y][x];
+                        let tileClass = "tile-floor";
+
+                        if (char === '@') tileClass = "tile-player";
+                        else if (char === '#') tileClass = "tile-wall";
+                        else if (char === 'C') tileClass = "tile-chest";
+                        else if (char === '>') tileClass = "tile-door";
+                        else if (char === 'E') tileClass = "tile-enemy-e";
+                        else if (char === 'G') tileClass = "tile-enemy-g";
+                        else if (char === 'O') tileClass = "tile-enemy-o";
+                        else if (char === 'D') tileClass = "tile-enemy-d";
+
+                        cellsHtml += `<div class="grid-tile ${tileClass}">${char}</div>`;
+                    }
+                }
+
+                gridContainer.innerHTML = cellsHtml;
+
+                // Barra de Status Atualizada
+                statusBar.innerHTML = `
+                    <div>HP: <span class="${this.player.hp < 15 ? 'text-red-400 animate-pulse' : 'text-emerald-300'}">${this.player.hp}/${this.player.max_hp}</span></div>
+                    <div>$$$: <span class="text-yellow-400">${this.player.money}</span></div>
+                    <div>Nível: <span class="text-cyan-300">${this.difficulty_level}</span></div>
+                    <div>Melee: <span class="text-emerald-300">${this.player.melee}</span></div>
+                    <div>Ranged: <span class="text-emerald-300">${this.player.ranged}</span></div>
+                    <div>Def: <span class="text-emerald-300">${this.player.defense}</span></div>
+                `;
+
+                this.renderLogs(logBox);
+            }
+
+            renderLogs(container) {
+                container.innerHTML = this.logs
+                    .map(log => `<div class="leading-tight text-emerald-300 border-l-2 border-emerald-600 pl-2 py-0.5">${log}</div>`)
+                    .join('');
+                container.scrollTop = container.scrollHeight;
+            }
+
+            handleInput(cmd) {
+                cmd = cmd.toLowerCase().trim();
+                sfx.init();
+
+                if (this.state === "MENU") {
+                    if (cmd === '1') {
+                        this.state = "PLAYING";
+                        this.generate_room();
+                        this.draw();
+                    }
+                } else if (this.state === "GACHA") {
+                    if (cmd === '1') this.roll_gacha('HP', 50);
+                    else if (cmd === '2') this.roll_gacha('Weapon', 75);
+                    else if (cmd === '3') this.roll_gacha('Armor', 60);
+                    
+                    this.state = "PLAYING";
+                    this.draw();
+                } else if (this.state === "PLAYING") {
+                    if (cmd) {
+                        this.process_input(cmd[0]);
+                    }
+                } else if (this.state === "GAMEOVER") {
+                    this.player = new Player(1, 1);
+                    this.difficulty_level = 1;
+                    this.logs = ["Bem-vindo a Dungeon! Sobreviva o maximo que puder."];
+                    this.state = "MENU";
+                    this.draw();
+                }
+            }
+        }
+
+        const game = new Game();
+
+        // Mapeamento de Teclas do Teclado para movimentação 2D fluida
+        window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            
+            // Suporte para WASD e Setas do Teclado
+            const keyMap = {
+                'arrowup': 'w',
+                'arrowdown': 's',
+                'arrowleft': 'a',
+                'arrowright': 'd',
+                'w': 'w',
+                's': 's',
+                'a': 'a',
+                'd': 'd',
+                'f': 'f',
+                'q': 'q',
+                'e': 'e',
+                'g': 'g',
+                '1': '1',
+                '2': '2',
+                '3': '3',
+                'enter': '1'
+            };
+
+            if (keyMap[key]) {
+                e.preventDefault();
+                game.handleInput(keyMap[key]);
+            }
+        });
+
+        // Renderização inicial ao carregar a página
+        window.onload = () => {
+            game.draw();
+        };
+    </script>
+</body>
+</html>
